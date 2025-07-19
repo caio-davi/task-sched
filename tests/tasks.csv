@@ -1,4 +1,6 @@
 name,duration,dependencies
 taskA.sh,2,file1
-taskB.sh,8,file1-file2
+taskB.sh,4,file2
 taskC.sh,5,file1-file3
+taskD.sh,6,file1-file2
+taskE.sh,1,file3
