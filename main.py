@@ -2,6 +2,7 @@ import argparse
 import logging
 import csv
 import subprocess
+import time
 
 TASKS_PATH="./tests/tasks/"
 
@@ -13,7 +14,7 @@ def parse_args():
         help="File containing the data to process")
     parser.add_argument(
         "--log-level",
-        default="INFO",
+        default="CRITICAL",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         help="Set the logging level (default: INFO)"
     )
@@ -44,13 +45,28 @@ def expected_runtime(tasks):
     for task in tasks:
         expected_time += int(task["duration"])
     return expected_time
+
+def run_taks(tasks):
+    start = time.time()
+    for task in tasks:
+            run_cmd(task["name"])
+    end = time.time()
+    duration = end - start
+    expected = expected_runtime(tasks)
+    logging.info("All tasks executed succefully")
+    logging.info(f"Execution duration time: {duration}")
+    logging.info(f"Expected duration time: {expected}")
+    logging.info(f"Difference between execution and expected time: {duration - expected}")
     
 if __name__ == "__main__":
     args = parse_args()
+
+    logger = logging.getLogger()
+    logger.setLevel(args.log_level)
+
     tasks = read_tasks(args.file)
 
     if args.dry_run:
         print(f"Expected duration time: {expected_runtime(tasks)} ")
     else:
-        for task in tasks:
-            run_cmd(task["name"])
+        run_taks(tasks)
