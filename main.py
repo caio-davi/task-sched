@@ -13,27 +13,35 @@ def parse_args():
     
     parser.add_argument(
         "file", 
-        help="File containing the data to process")
+        help="File containing the data to process.")
+    parser.add_argument(
+        "--serial",
+        action="store_true",
+        default=False,
+        help="Run tasks one by one in the file order."
+    )
     parser.add_argument(
         "--log-level",
         default="CRITICAL",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        help="Set the logging level (default: INFO)"
+        help="Set the logging level (default: CRITICAL)."
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
         default=False,
-        help="Validate the input task list and output the expected total runtime"
+        help="Validate the input task list and output the expected total runtime."
     )
     
     return parser.parse_args()
+
 
 def read_tasks(filepath):
     with open(filepath, mode="r", newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
         logging.info("Tasks loaded")
         return list(reader)
+
 
 def run_cmd(command,ready_events=None, done_event=None):
     if ready_events:
@@ -47,14 +55,20 @@ def run_cmd(command,ready_events=None, done_event=None):
     if done_event:
         done_event.set()
 
-def expected_runtime(tasks):
-    expected_time = 0
-    for task in tasks:
-        expected_time += int(task["duration"])
-    return expected_time
+
+def expected_runtime(tasks, serial):
+    if serial:
+        expected_time = 0
+        for task in tasks:
+            expected_time += int(task["duration"])
+        return expected_time
+    else:
+        return 0
+
 
 def get_dependencies(task):
     return set(task["dependencies"].split("-"))
+
 
 def dependency_graph(tasks):
     dependency_graph = defaultdict(set)
@@ -77,15 +91,33 @@ def dependency_graph(tasks):
 
     return dependency_graph
 
-def run_parallel(tasks, dependency_graph):
+
+def run_taks(tasks, serial):
+    start = time.time()
+    if serial:
+        logging.info("Serial execution")
+        run_serial(tasks)
+    else:
+        logging.info("Parallel execution")
+        run_parallel(tasks)
+
+    end = time.time()
+    duration = end - start
+    expected = expected_runtime(tasks, serial)
+    logging.info("All tasks executed succefully")
+    logging.info(f"Execution duration time: {duration}")
+    logging.info(f"Expected duration time: {expected}")
+    logging.info(f"Difference between execution and expected time: {duration - expected}")
+
+def run_parallel(tasks):
+    dependencies =  dependency_graph(tasks)
     task_events = {task["name"]: threading.Event() for task in tasks}
     threads = []
 
-    start = time.time()
     for task in tasks:
         name = task["name"]
         duration = task["duration"]
-        deps = dependency_graph[name]
+        deps = dependencies[name]
         ready_events = [task_events[dep] for dep in deps]
         done_event = task_events[name]
         t = threading.Thread(target=run_cmd, args=(name, ready_events, done_event))
@@ -95,25 +127,10 @@ def run_parallel(tasks, dependency_graph):
     for t in threads:
         t.join()
 
-    end = time.time()
-    duration = end - start
-    expected = expected_runtime(tasks)
-    logging.info("All tasks executed succefully")
-    logging.info(f"Execution duration time: {duration}")
-    logging.info(f"Expected duration time: {expected}")
-    logging.info(f"Difference between execution and expected time: {duration - expected}")
 
-def run_taks(tasks):
-    start = time.time()
+def run_serial(tasks):
     for task in tasks:
             run_cmd(task["name"])
-    end = time.time()
-    duration = end - start
-    expected = expected_runtime(tasks)
-    logging.info("All tasks executed succefully")
-    logging.info(f"Execution duration time: {duration}")
-    logging.info(f"Expected duration time: {expected}")
-    logging.info(f"Difference between execution and expected time: {duration - expected}")
     
 if __name__ == "__main__":
     args = parse_args()
@@ -124,6 +141,6 @@ if __name__ == "__main__":
     tasks = read_tasks(args.file)
 
     if args.dry_run:
-        print(f"Expected duration time: {expected_runtime(tasks)} ")
+        print(f"Expected duration time: {expected_runtime(tasks, args.serial)} ")
     else:
-        run_parallel(tasks, dependency_graph(tasks))
+        run_taks(tasks, args.serial)

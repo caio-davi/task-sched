@@ -5,7 +5,7 @@ DEVICE="./tests/resources/device"
 
 echo "busy" > "$DEVICE"
 
-sleep 6
+sleep 5
 
 COUNTER=$(cat "$FILE")
 NEW_COUNTER=$((COUNTER + 1))

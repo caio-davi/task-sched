@@ -5,7 +5,7 @@ FILE2="./tests/resources/counter2"
 
 RANDOM_NUMBER=$(( ( RANDOM % 1000 ) + 1 ))
 
-sleep 8
+sleep 6
 
 COUNTER1=$(cat "$FILE1")
 COUNTER2=$(cat "$FILE2")
