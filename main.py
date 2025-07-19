@@ -1,12 +1,9 @@
 import argparse
 import logging
 import csv
+import subprocess
 
-def read_tasks(filepath):
-    with open(filepath, mode="r", newline="", encoding="utf-8") as csvfile:
-        reader = csv.DictReader(csvfile)
-        logging.info("Tasks loaded")
-        return list(reader)
+TASKS_PATH="./tests/tasks/"
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -22,9 +19,23 @@ def parse_args():
     )
     
     return parser.parse_args()
+
+def read_tasks(filepath):
+    with open(filepath, mode="r", newline="", encoding="utf-8") as csvfile:
+        reader = csv.DictReader(csvfile)
+        logging.info("Tasks loaded")
+        return list(reader)
+
+def run_cmd(command):
+    try:
+        subprocess.run([f"{TASKS_PATH}{command}"])
+        logging.info(f"Task {command} executed succefully")
+    except subprocess.CalledProcessError:
+        logging.error(f"Task {command} failed")
+
     
 if __name__ == "__main__":
     args = parse_args()
     task = read_tasks(args.file)
     for task in task:
-        print (task)
+        run_cmd(task["name"])

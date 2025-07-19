@@ -1,7 +1,7 @@
 #!/bin/bash
 
-FILE="../resources/counter1"
-DEVICE="../resources/device"
+FILE="./tests/resources/counter1"
+DEVICE="./tests/resources/device"
 
 echo "busy" > "$DEVICE"
 

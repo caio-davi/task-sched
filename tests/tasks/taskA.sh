@@ -1,6 +1,6 @@
 #!/bin/bash
 
-FILE="../resources/counter1"
+FILE="./tests/resources/counter1"
 
 sleep 2
 

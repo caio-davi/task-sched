@@ -1,7 +1,7 @@
 #!/bin/bash
 
-FILE1="../resources/counter1"
-FILE2="../resources/counter2"
+FILE1="./tests/resources/counter1"
+FILE2="./tests/resources/counter2"
 
 RANDOM_NUMBER=$(( ( RANDOM % 1000 ) + 1 ))
 
