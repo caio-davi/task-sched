@@ -8,13 +8,14 @@ A command line tool to schedule and optionally run a series of tasks in parallel
 main.py [-h] [--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}] [--dry-run] file
 
 positional arguments:
-  file                  File containing the data to process
+  file                  File containing the data to process.
 
 options:
   -h, --help            show this help message and exit
+  --serial              Run tasks one by one in the file order.
   --log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}
-                        Set the logging level (default: INFO)
-  --dry-run             Validate the input task list and output the expected total runtime
+                        Set the logging level (default: CRITICAL).
+  --dry-run             Validate the input task list and output the expected total runtime.
 ```
 
 > [!NOTE]
