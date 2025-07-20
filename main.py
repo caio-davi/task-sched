@@ -6,6 +6,7 @@ import time
 import threading
 from collections import defaultdict
 import networkx as nx
+import sys
 
 TASKS_PATH="./tests/tasks/"
 
@@ -48,24 +49,71 @@ def get_dependencies(task):
     return set(task["dependencies"].split("-"))
 
 
+def get_task_by_name(task_name, tasks):
+    for task in tasks:
+        if task_name == task["name"]:
+            return task
+
+
+def get_all_dependencies(tasks):
+    dependencies = set()
+    for task in tasks:
+        for resource in get_dependencies(task):
+            dependencies.add(resource)
+    return dependencies
+
+
+def find_faster_by_name(tasks, tasks_names):
+    faster = ''
+    faster_duration = sys.maxsize
+    for name in tasks_names:
+        for task in tasks:
+            if name == task["name"]:
+                current = min(faster_duration, int(task["duration"]))
+                if current < faster_duration:
+                    faster_duration = current
+                    faster = task["name"]
+    return faster
+
+
+def is_mono_dependent(task):
+    return len(get_dependencies(task)) == 1
+
+
 def dependency_graph(tasks):
     dependency_graph = defaultdict(set)
-    primary_writer = {}
+    interested_parties = {}
 
     for task in tasks:
         for dependency in get_dependencies(task):
-            if dependency not in primary_writer:
-                primary_writer[dependency] = task["name"]
+            if dependency not in interested_parties:
+                interested_parties[dependency] = [task["name"]]
+            else:
+                interested_parties[dependency].append(task["name"])
 
-    logging.debug("Primary tasks by dependency: ")
-    for dep, task in primary_writer.items():
+    logging.debug("Interested parties by dependency: ")
+    for dep, task in interested_parties.items():
         logging.debug(f" {dep} : {task}")
 
     for task in tasks:
         for dependency in get_dependencies(task):
-            writer = primary_writer.get(dependency)
-            if writer and writer != task["name"]:
-                dependency_graph[task["name"]].add(writer)
+            writers = interested_parties.get(dependency)
+            for writer in writers:
+                if writer != task["name"]:
+                    dependency_graph[task["name"]].add(writer)
+
+    dependencies = get_all_dependencies(tasks)
+    
+    # Removing faster and less dependent tasks from dependency_graph
+    # it turns them into starters candidates. 
+    for resource in dependencies:
+        monodependents = []
+        for task_name in interested_parties[resource]:
+            if is_mono_dependent(get_task_by_name(task_name, tasks)):
+                monodependents.append(task_name)
+        removal_candidate = find_faster_by_name(tasks, monodependents)
+        if removal_candidate in dependency_graph:
+            del dependency_graph[removal_candidate]
 
     logging.debug("Task Dependencies: ")
     for task, deps in dependency_graph.items():
@@ -86,6 +134,16 @@ def run_cmd(command,ready_events=None, done_event=None):
     if done_event:
         done_event.set()
 
+
+def check_cycles(tasks):
+    try:
+        build_DiGraph(tasks)
+    except nx.NetworkXUnfeasible:
+        logging.critical("Cycle detected. Cannot determine a valid execution order")
+        logging.critical("Exit code 1")
+        sys.exit(1)
+
+
 def run_taks(tasks, serial):
     start = time.time()
     if serial:
@@ -104,6 +162,7 @@ def run_taks(tasks, serial):
     logging.info(f"Difference between execution and expected time: {duration - expected}")
 
 def run_parallel(tasks):
+    check_cycles(tasks)
     dependencies =  dependency_graph(tasks)
     task_events = {task["name"]: threading.Event() for task in tasks}
     threads = []
@@ -128,12 +187,11 @@ def run_serial(tasks):
 
 def get_durations(tasks):
     return {task["name"]: task["duration"] for task in tasks}
-    
 
-def critical_path(tasks):
+
+def build_DiGraph(tasks):
     graph = nx.DiGraph()
     dependencies =  dependency_graph(tasks)
-    longest_paths = {}
     durations = get_durations(tasks)
 
     for task, deps in dependencies.items():
@@ -144,8 +202,17 @@ def critical_path(tasks):
         if task not in list(nx.topological_sort(graph)):
             graph.add_node(task["name"])
 
-    nx.set_node_attributes(graph, durations, 'duration')   
+    nx.set_node_attributes(graph, durations, 'duration')
+    return graph
 
+
+def critical_path(tasks):
+    check_cycles(tasks)
+    graph = build_DiGraph(tasks)
+    longest_paths = {}
+    durations = get_durations(tasks)
+
+    # Plot dependency graph
     # import matplotlib.pyplot as plt
     # nx.draw(graph, with_labels=True, node_size=2000, arrows=True)
     # plt.show()
@@ -156,8 +223,7 @@ def critical_path(tasks):
             longest_paths[node] = int(durations[node])
         else:
             longest_paths[node] = min(longest_paths[p] for p in predecessors) + int(durations[node])
-    
-    
+
     return max(longest_paths.values())
 
 
