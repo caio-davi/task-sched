@@ -122,6 +122,41 @@ def dependency_graph(tasks):
     return dependency_graph
 
 
+def in_defaultdict(value, dict):
+    for val in dict.values():
+        if value in val:
+            return True
+
+## If cycles are found in the dependency graph
+## remove them by doing the dependent tasks one by one
+def dependency_cycled_graph(tasks):
+    logging.debug("Generating alternative dependency graph")
+    dependency_graph = defaultdict(set)
+    previous_writer = {}
+
+    for task in tasks:
+        for dependency in get_dependencies(task):
+            if dependency not in previous_writer:
+                previous_writer[dependency] = task["name"]
+
+    logging.debug("Primary tasks by dependency: ")
+    for k, v in previous_writer.items():
+        logging.debug(f" {k} : {v}")
+
+    for task in tasks:
+        for dependency in get_dependencies(task):
+            writer = previous_writer.get(dependency)
+            if writer and writer != task["name"]:
+                dependency_graph[task["name"]].add(writer)
+                previous_writer[dependency] = task["name"]
+
+    logging.debug("Task Dependencies: ")
+    for task, deps in dependency_graph.items():
+        logging.debug(f"    {task} depends on: {', '.join(deps)}")
+
+    return dependency_graph
+
+
 def run_cmd(command,ready_events=None, done_event=None):
     if ready_events:
         for ev in ready_events:
@@ -135,13 +170,13 @@ def run_cmd(command,ready_events=None, done_event=None):
         done_event.set()
 
 
-def check_cycles(tasks):
+def check_cycles(tasks, dependencies):
     try:
-        build_DiGraph(tasks)
+        build_DiGraph(tasks, dependencies)
+        return False
     except nx.NetworkXUnfeasible:
-        logging.critical("Cycle detected. Cannot determine a valid execution order")
-        logging.critical("Exit code 1")
-        sys.exit(1)
+        logging.critical("Cycles detected. Running alternative dependecy builder. Expect impact in performance")
+        return True
 
 
 def run_taks(tasks, serial):
@@ -162,8 +197,9 @@ def run_taks(tasks, serial):
     logging.info(f"Difference between execution and expected time: {duration - expected}")
 
 def run_parallel(tasks):
-    check_cycles(tasks)
     dependencies =  dependency_graph(tasks)
+    if check_cycles(tasks, dependencies):
+        dependencies =  dependency_cycled_graph(tasks)
     task_events = {task["name"]: threading.Event() for task in tasks}
     threads = []
 
@@ -189,9 +225,8 @@ def get_durations(tasks):
     return {task["name"]: task["duration"] for task in tasks}
 
 
-def build_DiGraph(tasks):
+def build_DiGraph(tasks, dependencies):
     graph = nx.DiGraph()
-    dependencies =  dependency_graph(tasks)
     durations = get_durations(tasks)
 
     for task, deps in dependencies.items():
@@ -207,8 +242,10 @@ def build_DiGraph(tasks):
 
 
 def critical_path(tasks):
-    check_cycles(tasks)
-    graph = build_DiGraph(tasks)
+    dependencies =  dependency_graph(tasks)
+    if check_cycles(tasks, dependencies):
+        dependencies =dependency_cycled_graph(tasks)
+    graph = build_DiGraph(tasks, dependencies)
     longest_paths = {}
     durations = get_durations(tasks)
 
