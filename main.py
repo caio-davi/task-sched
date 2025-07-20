@@ -5,6 +5,7 @@ import subprocess
 import time
 import threading
 from collections import defaultdict
+import networkx as nx
 
 TASKS_PATH="./tests/tasks/"
 
@@ -43,16 +44,6 @@ def read_tasks(filepath):
         return list(reader)
 
 
-def expected_runtime(tasks, serial):
-    if serial:
-        expected_time = 0
-        for task in tasks:
-            expected_time += int(task["duration"])
-        return expected_time
-    else:
-        return 0
-
-
 def get_dependencies(task):
     return set(task["dependencies"].split("-"))
 
@@ -67,8 +58,8 @@ def dependency_graph(tasks):
                 primary_writer[dependency] = task["name"]
 
     logging.debug("Primary tasks by dependency: ")
-    for k, v in primary_writer.items():
-        logging.debug(f" {k} : {v}")
+    for dep, task in primary_writer.items():
+        logging.debug(f" {dep} : {task}")
 
     for task in tasks:
         for dependency in get_dependencies(task):
@@ -133,7 +124,53 @@ def run_parallel(tasks):
 def run_serial(tasks):
     for task in tasks:
             run_cmd(task["name"])
+
+
+def get_durations(tasks):
+    return {task["name"]: task["duration"] for task in tasks}
     
+
+def critical_path(tasks):
+    graph = nx.DiGraph()
+    dependencies =  dependency_graph(tasks)
+    longest_paths = {}
+    durations = get_durations(tasks)
+
+    for task, deps in dependencies.items():
+        for dep in deps:
+            graph.add_edge(dep,task)
+
+    for task in tasks:
+        if task not in list(nx.topological_sort(graph)):
+            graph.add_node(task["name"])
+
+    nx.set_node_attributes(graph, durations, 'duration')   
+
+    # import matplotlib.pyplot as plt
+    # nx.draw(graph, with_labels=True, node_size=2000, arrows=True)
+    # plt.show()
+
+    for node in nx.topological_sort(graph):
+        predecessors = list(graph.predecessors(node))
+        if not predecessors:
+            longest_paths[node] = int(durations[node])
+        else:
+            longest_paths[node] = min(longest_paths[p] for p in predecessors) + int(durations[node])
+    
+    
+    return max(longest_paths.values())
+
+
+def expected_runtime(tasks, serial):
+    if serial:
+        expected_time = 0
+        for task in tasks:
+            expected_time += int(task["duration"])
+        return expected_time
+    else:
+        return critical_path(tasks)
+    
+
 if __name__ == "__main__":
     args = parse_args()
 
