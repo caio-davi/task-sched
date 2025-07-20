@@ -1,0 +1,5 @@
+name,duration,dependencies
+taskD.sh,6,counter1-counter2
+taskA.sh,2,counter1
+taskB.sh,4,counter2
+taskE.sh,1,device
