@@ -21,3 +21,9 @@ options:
 > [!NOTE]
 > Use `--dry-run` to validate the input task list and output the expected total runtime without running the tasks.
 > Use `--log-level=INFO` to run the tasks and determine the difference in the actual runtime versus the expected runtime.
+
+
+## Assumptions:
+
+- Concurrency vs Maultiprocessing
+- Task name as UID
