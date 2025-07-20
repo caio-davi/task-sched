@@ -41,7 +41,7 @@ def parse_args():
 def read_tasks(filepath):
     with open(filepath, mode="r", newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
-        logging.info("Tasks loaded")
+        logging.debug("Tasks loaded")
         return list(reader)
 
 
@@ -128,7 +128,7 @@ def run_cmd(command,ready_events=None, done_event=None):
             ev.wait()
     try:
         subprocess.run([f"{TASKS_PATH}{command}"])
-        logging.info(f"Task {command} executed succefully")
+        logging.debug(f"Task {command} executed succefully")
     except subprocess.CalledProcessError:
         logging.error(f"Task {command} failed")
     if done_event:
