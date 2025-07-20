@@ -59,7 +59,6 @@ tasks_cycle3.csv| 30.00| 30.04|| 16.00 |16.02 | 0.02|
 - Python is my go-to language for prototyping, thus my choice here. However, Go would probably be better suited for this exercise (`goroutines`), 
 - I'm using the Python `threading` package, which is multithreaded but not multiprocessed. I opted for this instead of `multiprocessing` package mostly for simplicity. Since the goal of the exercise seemed to be exploring deadlocks, race conditions, dependencies, concurrency, etc., the `threading` package seemed to be enough.
 - Again, for simplicity, I assumed the `task['name']` as UID. This could be easily changed. 
-- The code is poorly documented, with almost no comments explaining the execution. My apologies for that, I'll try to do something about it during the week.
 - There are two main reasons for the differences between Real and expected times:
   - Millisecond differences: The tasks are actually running I/O operations, and these operations' execution times are being disregarded.
   - Second differences: When using `threading`, we don't schedule the order of tasks; instead, we pass the dependency tree to the `threading` scheduler. The algorithm I'm using to find the critical path and compute the total duration time may differ from the algorithm used by the `threading` package. For a more precise estimate, I would need to study the source code and attempt to reproduce their approach here. 
