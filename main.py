@@ -43,19 +43,6 @@ def read_tasks(filepath):
         return list(reader)
 
 
-def run_cmd(command,ready_events=None, done_event=None):
-    if ready_events:
-        for ev in ready_events:
-            ev.wait()
-    try:
-        subprocess.run([f"{TASKS_PATH}{command}"])
-        logging.info(f"Task {command} executed succefully")
-    except subprocess.CalledProcessError:
-        logging.error(f"Task {command} failed")
-    if done_event:
-        done_event.set()
-
-
 def expected_runtime(tasks, serial):
     if serial:
         expected_time = 0
@@ -79,6 +66,10 @@ def dependency_graph(tasks):
             if dependency not in primary_writer:
                 primary_writer[dependency] = task["name"]
 
+    logging.debug("Primary tasks by dependency: ")
+    for k, v in primary_writer.items():
+        logging.debug(f" {k} : {v}")
+
     for task in tasks:
         for dependency in get_dependencies(task):
             writer = primary_writer.get(dependency)
@@ -91,6 +82,18 @@ def dependency_graph(tasks):
 
     return dependency_graph
 
+
+def run_cmd(command,ready_events=None, done_event=None):
+    if ready_events:
+        for ev in ready_events:
+            ev.wait()
+    try:
+        subprocess.run([f"{TASKS_PATH}{command}"])
+        logging.info(f"Task {command} executed succefully")
+    except subprocess.CalledProcessError:
+        logging.error(f"Task {command} failed")
+    if done_event:
+        done_event.set()
 
 def run_taks(tasks, serial):
     start = time.time()
@@ -116,7 +119,6 @@ def run_parallel(tasks):
 
     for task in tasks:
         name = task["name"]
-        duration = task["duration"]
         deps = dependencies[name]
         ready_events = [task_events[dep] for dep in deps]
         done_event = task_events[name]
