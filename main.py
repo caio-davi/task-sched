@@ -394,7 +394,7 @@ def critical_path(tasks: csv.DictReader) -> int:
         if not predecessors:
             longest_paths[node] = int(durations[node])
         else:
-            longest_paths[node] = min(longest_paths[p] for p in predecessors) + int(
+            longest_paths[node] = max(longest_paths[p] for p in predecessors) + int(
                 durations[node]
             )
 
