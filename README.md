@@ -12,7 +12,7 @@ source ./.venv/bin/activate
 ```
 ### Install dependencies
 ```bash
-pip install -r requirements
+uv sync
 ```
 
 ### Run tests:

@@ -42,19 +42,22 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def read_tasks(filepath: str) -> csv.DictReader:
+def read_tasks(filepath: str) -> dict:
     """Read a `.csv` file from the given path.
 
     Args:
         filepath (str): path to the file.
 
     Returns:
-        csv.DictReader: Dictionary with the csv contents.
+        dict: Dictionary with the csv contents.
     """
     with open(filepath, mode="r", newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
         logging.debug("Tasks loaded")
-        return list(reader)
+        tasks = list(reader)
+        for i, task in enumerate(tasks):
+            task['UID'] = str(i + 1)
+        return dict((task['UID'], task) for task in tasks)
 
 
 def get_dependencies(task: dict) -> set:
@@ -69,61 +72,46 @@ def get_dependencies(task: dict) -> set:
     return set(task["dependencies"].split("-"))
 
 
-def get_task_by_name(task_name: str, tasks: csv.DictReader) -> dict:
-    """Given a str `task_name` return the full row (name, duration, dependencies) from the tasks list.
+def get_all_dependencies(tasks: dict) -> set:
+    """Return all dependencies for all tasks in the original list.
 
     Args:
-        task_name (str): Task name
-        tasks (csv.DictReader): List of tasks
-
-    Returns:
-        dict: task
-    """
-    for task in tasks:
-        if task_name == task["name"]:
-            return task
-
-
-def get_all_dependencies(tasks: csv.DictReader) -> set:
-    """Return all dependeices for all tasks in the original list.
-
-    Args:
-        tasks (csv.DictReader): Tasks
+        tasks (dict): Tasks
 
     Returns:
         set: Dependencies
     """
     dependencies = set()
-    for task in tasks:
+    for _, task in tasks.items():
         for resource in get_dependencies(task):
             dependencies.add(resource)
     return dependencies
 
 
-def find_faster_by_name(tasks: csv.DictReader, tasks_names: list) -> str:
-    """Find the fastest task in a sub-group of tasks. Returns the tasks["name"].
+def find_faster_by_uid(tasks: dict, tasks_uids: list) -> str:
+    """Find the fastest task in a sub-group of tasks. Returns the task UID.
 
     Args:
-        tasks (csv.DictReader): Full list of tasks
-        tasks_names (list): Subgroup where it looks for
+        tasks (dict): Full list of tasks
+        tasks_uids (list): Subgroup where it looks for
 
     Returns:
-        str: Name of the fastest task
+        str: UID of the fastest task
     """
     faster = ""
     faster_duration = sys.maxsize
-    for name in tasks_names:
-        for task in tasks:
-            if name == task["name"]:
-                current = min(faster_duration, int(task["duration"]))
-                if current < faster_duration:
-                    faster_duration = current
-                    faster = task["name"]
+    for uid in tasks_uids:
+        task = tasks[uid]
+        if task:
+            current = min(faster_duration, int(task["duration"]))
+            if current < faster_duration:
+                faster_duration = current
+                faster = uid
     return faster
 
 
 def is_mono_dependent(task: dict) -> bool:
-    """Return true is task has only one dependency
+    """Return true if task has only one dependency
 
     Args:
         task (dict): Task
@@ -134,11 +122,11 @@ def is_mono_dependent(task: dict) -> bool:
     return len(get_dependencies(task)) == 1
 
 
-def dependency_graph(tasks: csv.DictReader) -> defaultdict:
+def dependency_graph(tasks: dict) -> defaultdict:
     """Build up an optimized dependency graph. It may create cycled graphs, though.
 
     Args:
-        tasks (csv.DictReader): Tasks
+        tasks (dict): Tasks
 
     Returns:
         defaultdict: Dependency Graph
@@ -146,23 +134,23 @@ def dependency_graph(tasks: csv.DictReader) -> defaultdict:
     dependency_graph = defaultdict(set)
     interested_parties = {}
 
-    for task in tasks:
+    for uid, task in tasks.items():
         for dependency in get_dependencies(task):
             if dependency not in interested_parties:
-                interested_parties[dependency] = [task["name"]]
+                interested_parties[dependency] = [str(uid)]
             else:
-                interested_parties[dependency].append(task["name"])
+                interested_parties[dependency].append(str(uid))
 
     logging.debug("Interested parties by dependency: ")
     for dep, task in interested_parties.items():
         logging.debug(f" {dep} : {task}")
 
-    for task in tasks:
+    for uid, task in tasks.items():
         for dependency in get_dependencies(task):
             writers = interested_parties.get(dependency)
             for writer in writers:
-                if writer != task["name"]:
-                    dependency_graph[task["name"]].add(writer)
+                if writer != uid:
+                    dependency_graph[uid].add(writer)
 
     dependencies = get_all_dependencies(tasks)
 
@@ -170,10 +158,10 @@ def dependency_graph(tasks: csv.DictReader) -> defaultdict:
     # it turns them into starters candidates.
     for resource in dependencies:
         monodependents = []
-        for task_name in interested_parties[resource]:
-            if is_mono_dependent(get_task_by_name(task_name, tasks)):
-                monodependents.append(task_name)
-        removal_candidate = find_faster_by_name(tasks, monodependents)
+        for task_uid in interested_parties[resource]:
+            if is_mono_dependent(tasks[task_uid]):
+                monodependents.append(task_uid)
+        removal_candidate = find_faster_by_uid(tasks, monodependents)
         if removal_candidate in dependency_graph:
             del dependency_graph[removal_candidate]
 
@@ -186,14 +174,14 @@ def dependency_graph(tasks: csv.DictReader) -> defaultdict:
 
 ## If cycles are found in the dependency graph
 ## remove them by doing the dependent tasks one by one
-def dependency_cycled_graph(tasks: csv.DictReader) -> defaultdict:
-    """In case the prefered dependency_graph function had created
+def dependency_cycled_graph(tasks: dict) -> defaultdict:
+    """In case the preferred dependency_graph function had created
     a cycled graph, this function is an option to avoid the cycles.
-    It will manage to run all dependent tasks in order, reduncing the
+    It will manage to run all dependent tasks in order, reducing the
     performance
 
     Args:
-        tasks (csv.DictReader): Tasks
+        tasks (dict): Tasks
 
     Returns:
         defaultdict: Dependency Graph
@@ -202,21 +190,21 @@ def dependency_cycled_graph(tasks: csv.DictReader) -> defaultdict:
     dependency_graph = defaultdict(set)
     previous_writer = {}
 
-    for task in tasks:
+    for uid, task in tasks.items():
         for dependency in get_dependencies(task):
             if dependency not in previous_writer:
-                previous_writer[dependency] = task["name"]
+                previous_writer[dependency] = uid
 
     logging.debug("Primary tasks by dependency: ")
     for k, v in previous_writer.items():
         logging.debug(f" {k} : {v}")
 
-    for task in tasks:
+    for uid, task in tasks.items():
         for dependency in get_dependencies(task):
             writer = previous_writer.get(dependency)
-            if writer and writer != task["name"]:
-                dependency_graph[task["name"]].add(writer)
-                previous_writer[dependency] = task["name"]
+            if writer and writer != uid:
+                dependency_graph[uid].add(writer)
+                previous_writer[dependency] = uid
 
     logging.debug("Task Dependencies: ")
     for task, deps in dependency_graph.items():
@@ -228,7 +216,7 @@ def dependency_cycled_graph(tasks: csv.DictReader) -> defaultdict:
 def run_cmd(
     command: str, ready_events: list = None, done_event: threading.Event = None
 ):
-    """Check if the dependencies are ready, run the command, finnaly mark it as done
+    """Check if the dependencies are ready, run the command, finally mark it as done
 
     Args:
         command (str): Command
@@ -240,18 +228,18 @@ def run_cmd(
             ev.wait()
     try:
         subprocess.run([f"{TASKS_PATH}{command}"])
-        logging.debug(f"Task {command} executed succefully")
+        logging.debug(f"Task {command} executed successfully")
     except subprocess.CalledProcessError:
         logging.error(f"Task {command} failed")
     if done_event:
         done_event.set()
 
 
-def check_cycles(tasks: csv.DictReader, dependencies: defaultdict) -> bool:
+def check_cycles(tasks: dict, dependencies: defaultdict) -> bool:
     """Check if the Dependency Graph is a cycled graph.
 
     Args:
-        tasks (csv.DictReader): Tasks
+        tasks (dict): Tasks
         dependencies (defaultdict): Dependency Graph
 
     Returns:
@@ -262,16 +250,16 @@ def check_cycles(tasks: csv.DictReader, dependencies: defaultdict) -> bool:
         return False
     except nx.NetworkXUnfeasible:
         logging.critical(
-            "Cycles detected. Running alternative dependecy builder. Expect impact in performance"
+            "Cycles detected. Running alternative dependency builder. Expect impact in performance"
         )
         return True
 
 
-def run_taks(tasks: csv.DictReader, serial: bool):
-    """Run all Tasks in aserial or parallel
+def run_taks(tasks: dict, serial: bool):
+    """Run all Tasks in serial or parallel
 
     Args:
-        tasks (csv.DictReader): Tasks
+        tasks (dict): Tasks
         serial (bool): Should it run serial?
     """
     start = time.time()
@@ -285,7 +273,7 @@ def run_taks(tasks: csv.DictReader, serial: bool):
     end = time.time()
     duration = end - start
     expected = expected_runtime(tasks, serial)
-    logging.info("All tasks executed succefully")
+    logging.info("All tasks executed successfully")
     logging.info(f"Execution duration time: {duration}")
     logging.info(f"Expected duration time: {expected}")
     logging.info(
@@ -293,25 +281,25 @@ def run_taks(tasks: csv.DictReader, serial: bool):
     )
 
 
-def run_parallel(tasks: csv.DictReader):
+def run_parallel(tasks: dict):
     """Run all tasks in parallel
 
     Args:
-        tasks (csv.DictReader): Tasks
+        tasks (dict): Tasks
     """
     dependencies = dependency_graph(tasks)  # Try the optimized dependency builder
     if check_cycles(tasks, dependencies):
         dependencies = dependency_cycled_graph(
             tasks
         )  # Use the sub-optimal, if finds cycles in dependency graph
-    task_events = {task["name"]: threading.Event() for task in tasks}
+    task_events = {uid: threading.Event() for uid, task in tasks.items()}
     threads = []
 
-    for task in tasks:
+    for uid, task in tasks.items():
         name = task["name"]
-        deps = dependencies[name]
+        deps = dependencies[uid]
         ready_events = [task_events[dep] for dep in deps]
-        done_event = task_events[name]
+        done_event = task_events[uid]
         t = threading.Thread(target=run_cmd, args=(name, ready_events, done_event))
         threads.append(t)
         t.start()
@@ -320,33 +308,33 @@ def run_parallel(tasks: csv.DictReader):
         t.join()
 
 
-def run_serial(tasks: csv.DictReader):
+def run_serial(tasks: dict):
     """Run all tasks one by one in order
 
     Args:
-        tasks (csv.DictReader): Tasks
+        tasks (dict): Tasks
     """
-    for task in tasks:
+    for uid, task in tasks.items():
         run_cmd(task["name"])
 
 
-def get_durations(tasks: csv.DictReader) -> dict:
+def get_durations(tasks: dict) -> dict:
     """Get durations for each task
 
     Args:
-        tasks (csv.DictReader): Tasks
+        tasks (dict): Tasks
 
     Returns:
-        _type_: Dictionary with key=names and values=durations
+        dict: Dictionary with key=UIDs and values=durations
     """
-    return {task["name"]: task["duration"] for task in tasks}
+    return {uid: task["duration"] for uid, task in tasks.items()}
 
 
-def build_DiGraph(tasks: csv.DictReader, dependencies: defaultdict) -> nx.digraph:
+def build_DiGraph(tasks: dict, dependencies: defaultdict) -> nx.digraph:
     """Build a DiGraph (Directed graphs with self loops) from the dependencies graph.
 
     Args:
-        tasks (csv.DictReader): Tasks
+        tasks (dict): Tasks
         dependencies (defaultdict): Dependency graph
 
     Returns:
@@ -359,20 +347,20 @@ def build_DiGraph(tasks: csv.DictReader, dependencies: defaultdict) -> nx.digrap
         for dep in deps:
             graph.add_edge(dep, task)
 
-    for task in tasks:
-        if task not in list(nx.topological_sort(graph)):
-            graph.add_node(task["name"])
+    for uid, task in tasks.items():
+        if uid not in list(nx.topological_sort(graph)):
+            graph.add_node(uid)
 
     nx.set_node_attributes(graph, durations, "duration")
     return graph
 
 
-def critical_path(tasks: csv.DictReader) -> int:
-    """Find the critical path (the most time consumind path in the directed graph)
+def critical_path(tasks: dict) -> int:
+    """Find the critical path (the most time consuming path in the directed graph)
     and return the duration
 
     Args:
-        tasks (csv.DictReader): Tasks
+        tasks (dict): Tasks
 
     Returns:
         int: Duration
@@ -401,11 +389,11 @@ def critical_path(tasks: csv.DictReader) -> int:
     return max(longest_paths.values())
 
 
-def expected_runtime(tasks: csv.DictReader, serial: bool) -> int:
+def expected_runtime(tasks: dict, serial: bool) -> int:
     """Return the expected time for running all the tasks
 
     Args:
-        tasks (csv.DictReader): Tasks
+        tasks (dict): Tasks
         serial (bool): Should it run serial?
 
     Returns:
@@ -413,7 +401,7 @@ def expected_runtime(tasks: csv.DictReader, serial: bool) -> int:
     """
     if serial:
         expected_time = 0
-        for task in tasks:
+        for uid, task in tasks.items():
             expected_time += int(task["duration"])
         return expected_time
     else:
