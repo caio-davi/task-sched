@@ -4,12 +4,6 @@ A command line tool to schedule and optionally run a series of tasks in parallel
 
 ## Run
 
-### (Optional) Create environment:
-
-```bash
-python3 -m venv --system-site-packages ./.venv
-source ./.venv/bin/activate
-```
 ### Install dependencies
 ```bash
 uv sync
